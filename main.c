@@ -90,7 +90,8 @@ int main() {
   float delta;  //no unsigned here (you can't)
   float timer = 0;
 
-  while(1) {
+  //using while wastes an instruction and a compare (at least in arm)
+loop:
     newTime = SDL_GetTicks();
     delta = (newTime - oldTime)/1000.0f;
     timer += delta;
@@ -129,7 +130,7 @@ int main() {
 
     oldTime = newTime;
     SDL_Delay(16);
-  }
+    goto loop;
 end:
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
