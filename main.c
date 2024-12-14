@@ -6,6 +6,7 @@
 #define gravity 20
 #define jumpStrength 10
 #define sqrt2 sqrtf(2.0f)
+#define pipeSpeed 100
 
 struct float2 {
   float x;
@@ -19,18 +20,19 @@ struct colour {
   unsigned char a;
 };
 
-struct rect2 {
-  SDL_Rect a;
-  SDL_Rect b;
+struct drawRect {
+  SDL_Rect rec;
+  struct colour col;
 };
 
 typedef struct float2 position; //shorthand
+typedef struct float2 vector2;
 typedef struct colour colour;   //i got tired of typing struct all the time last project
-typedef struct rect2 pipe;
+typedef struct drawRect rect;
 
-const colour birdColour = {226, 53, 102, 255};
-const colour backround = {220, 134, 159, 255};
-const colour black = {0, 0, 0, 255};
+#define backround (colour){220, 134, 148, 255}
+#define birdColour (colour){226, 53, 102, 255}
+#define black (colour){0, 0, 0, 255}
 
 void setColour(SDL_Renderer* renderer, colour col) {
   SDL_SetRenderDrawColor(renderer, col.r, col.g, col.b, col.a);
@@ -46,35 +48,36 @@ void drawCircle(SDL_Renderer* renderer, position pos, float radius, colour col) 
   }
 }
 
-SDL_Rect drawRectWithOutLine(SDL_Renderer* renderer, position pos, position size, colour col, colour colOutline, int outWidth) {
-  const unsigned int topOffset = 10;
-  SDL_Rect mainBody = {pos.x - size.x/2, pos.y - size.y/2, size.x/2, size.y/2};
-  SDL_Rect mainOutLine = {mainBody.x - outWidth/2.0f, mainBody.y - outWidth/2.0f, mainBody.w + outWidth, mainBody.h + outWidth};
-  setColour(renderer, colOutline);
-  SDL_RenderFillRect(renderer, &mainOutLine);   //think of it like layering pancakes, you want the biggest one on the bottom, but you can still see the edges
-  setColour(renderer, col);
-  SDL_RenderFillRect(renderer, &mainBody);
-  return mainBody;
+void drawRect(SDL_Renderer* renderer, rect* inRect) {
+  setColour(renderer, inRect->col);
+  SDL_RenderFillRect(renderer, &inRect->rec);
 }
 
-pipe drawPipe(SDL_Renderer* renderer, position pos) {
-  pipe out;
-  out.a = drawRectWithOutLine(renderer, pos, (position){100, 1000}, birdColour,
-                      black, 10);
-  out.b = drawRectWithOutLine(renderer, (position){pos.x + 7, pos.y + 1}, (position){126, 75}, birdColour,
-                        black, 10);
-  return out;
+void drawRectWithOutline(SDL_Renderer* renderer, rect *inRect, int borderWidth, colour col) {
+  //first calculate the outline
+  SDL_Rect border;
+  border.x = inRect->rec.x - borderWidth;
+  border.y = inRect->rec.y - borderWidth;
+  border.w = inRect->rec.w + (borderWidth << 1);
+  border.h = inRect->rec.h + (borderWidth << 1);
+  drawRect(renderer, &(rect){border, col});
+  drawRect(renderer, inRect);
 }
 
-int getPipeColliding(pipe in, SDL_Rect rect) {
-  SDL_Rect buffer;
-  return SDL_IntersectRect(&in.a, &rect, &buffer) || SDL_IntersectRect(&in.b, &rect, &buffer);
+int rectColliding(rect* a, rect* b) {
+  SDL_Rect buf;
+  return SDL_IntersectRect(&a->rec, &b->rec, &buf);
+}
+
+int sdlrectColliding(SDL_Rect* a, rect* b) {
+  SDL_Rect buf;
+  return SDL_IntersectRect(a, &b->rec, &buf);
 }
 
 int main() {
   SDL_Init(SDL_INIT_VIDEO);
 
-  position winSize = {800, 600};
+  position winSize = {1000, 600};
   SDL_Window* window = SDL_CreateWindow("i use arch btw :3", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, winSize.x, winSize.y, SDL_WINDOW_SHOWN);
 
   SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
@@ -90,47 +93,49 @@ int main() {
   float delta;  //no unsigned here (you can't)
   float timer = 0;
 
-  //using while wastes an instruction and a compare (at least in arm)
+  rect test = {(SDL_Rect){0,0,100,100}, birdColour};
+
+  //using while wastes an instruction (at least in arm)
 loop:
-    newTime = SDL_GetTicks();
-    delta = (newTime - oldTime)/1000.0f;
-    timer += delta;
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {
-      if (event.type == SDL_QUIT) {
+  newTime = SDL_GetTicks();
+  delta = (newTime - oldTime)/1000.0f;
+  timer += delta;
+  SDL_Event event;
+  while(SDL_PollEvent(&event)) {
+    if(event.type == SDL_QUIT) {
+      goto end;
+    } else if(event.type == SDL_KEYDOWN) {
+      if(event.key.keysym.sym == SDLK_q && (event.key.keysym.mod == KMOD_LSHIFT ||  //this ordering does matter
+        event.key.keysym.mod == KMOD_RSHIFT)) {
         goto end;
-      } else if(event.type == SDL_KEYDOWN) {
-        if(event.key.keysym.sym == SDLK_q && (event.key.keysym.mod == KMOD_LSHIFT ||  //this ordering does matter
-          event.key.keysym.mod == KMOD_RSHIFT)) {
-          goto end;
-        } else if(event.key.keysym.sym == SDLK_SPACE) {
-          birdV = -jumpStrength;
-        }
+      } else if(event.key.keysym.sym == SDLK_SPACE) {
+        birdV = -jumpStrength;
       }
     }
+  }
 
-    SDL_SetRenderDrawColor(renderer, backround.r, backround.g, backround.b, backround.a);
-    SDL_RenderClear(renderer);
+  SDL_SetRenderDrawColor(renderer, backround.r, backround.g, backround.b, backround.a);
+  SDL_RenderClear(renderer);
 
-    drawCircle(renderer, birdPos, birdR, birdColour);
+  drawRectWithOutline(renderer, &test, 12, black);
+  drawCircle(renderer, birdPos, birdR, birdColour);
 
-    pipe pip = drawPipe(renderer, (position){200, 200});
+  SDL_RenderPresent(renderer);
 
-    if(getPipeColliding(pip, birdBox)) goto end;
+  if(birdPos.y >= winSize.y || birdPos.y <= 0)
+    goto end;
 
-    SDL_RenderPresent(renderer);
+  SDL_Rect buffer;
+  if(sdlrectColliding(&birdBox, &test))
+    goto end;
 
-    if(birdPos.y >= winSize.y || birdPos.y <= 0) {
-      goto end;
-    }
+  birdPos.y += birdV;
+  birdBox.y = birdPos.y - birdR/sqrt2;
+  birdV += gravity * delta;
 
-    birdPos.y += birdV;
-    birdBox.y = birdPos.y - birdR/sqrt2;
-    birdV += gravity * delta;
-
-    oldTime = newTime;
-    SDL_Delay(16);
-    goto loop;
+  oldTime = newTime;
+  SDL_Delay(16);
+  goto loop;
 end:
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
