@@ -25,10 +25,23 @@ struct drawRect {
   struct colour col;
 };
 
+
 typedef struct float2 position; //shorthand
 typedef struct float2 vector2;
 typedef struct colour colour;   //i got tired of typing struct all the time last project
 typedef struct drawRect rect;
+
+struct pipe {
+  SDL_Rect a;
+  SDL_Rect b;
+  SDL_Rect c;
+  SDL_Rect d;
+  colour Basecol;
+  colour outCol;
+  int borderWidth;
+};
+
+typedef struct pipe pipe;
 
 #define backround (colour){220, 134, 148, 255}
 #define birdColour (colour){226, 53, 102, 255}
@@ -53,15 +66,44 @@ void drawRect(SDL_Renderer* renderer, rect* inRect) {
   SDL_RenderFillRect(renderer, &inRect->rec);
 }
 
+void moveRect(SDL_Rect* in, position* offset) {
+  in->x += offset->x;
+  in->y += offset->y;
+}
+
+void movePipe(pipe* in, position* offest) {
+  moveRect(&in->a, offest);
+  moveRect(&in->b, offest);
+  moveRect(&in->c, offest);
+  moveRect(&in->d, offest);
+}
+
 void drawRectWithOutline(SDL_Renderer* renderer, rect *inRect, int borderWidth, colour col) {
   //first calculate the outline
   SDL_Rect border;
   border.x = inRect->rec.x - borderWidth;
   border.y = inRect->rec.y - borderWidth;
   border.w = inRect->rec.w + (borderWidth << 1);
-  border.h = inRect->rec.h + (borderWidth << 1);
+  border.h = inRect->rec.h + (borderWidth << 1); //<< muls by 2
   drawRect(renderer, &(rect){border, col});
   drawRect(renderer, inRect);
+}
+
+void drawPipe(SDL_Renderer* renderer, pipe* in) {
+  drawRectWithOutline(renderer, &(rect){in->a, in->Basecol}, in->borderWidth, in->outCol);
+  drawRectWithOutline(renderer, &(rect){in->b, in->Basecol}, in->borderWidth, in->outCol);
+  drawRectWithOutline(renderer, &(rect){in->c, in->Basecol}, in->borderWidth, in->outCol);
+  drawRectWithOutline(renderer, &(rect){in->d, in->Basecol}, in->borderWidth, in->outCol);
+}
+
+void initPipe(pipe* in, position* pos) {
+  const position capSize = (position){70,20};
+  const position midSize = (position){60,1000};
+  const float yOff = 250;
+  in->a = (SDL_Rect){pos->x - (midSize.x/2 - capSize.x/2), pos->y - midSize.y, midSize.x, midSize.y};
+  in->b = (SDL_Rect){pos->x, pos->y, capSize.x, capSize.y};
+  in->c = (SDL_Rect){pos->x - (midSize.x/2 - capSize.x/2), pos->y + midSize.y + yOff, midSize.x, -midSize.y};
+  in->d = (SDL_Rect){pos->x, pos->y + yOff, capSize.x, capSize.y};
 }
 
 int rectColliding(rect* a, rect* b) {
@@ -90,8 +132,14 @@ int main() {
 
   unsigned int oldTime = SDL_GetTicks(); //time isn't negative hence the unsigned
   unsigned int newTime;
-  float delta;  //no unsigned here (you can't)
+  float delta;  //no unsigned here (you can't :( )
   float timer = 0;
+
+  pipe testPipe;
+  initPipe(&testPipe, &(position){500, 300});
+  testPipe.borderWidth = 12;
+  testPipe.Basecol = birdColour;
+  testPipe.outCol = black;
 
   rect test = {(SDL_Rect){0,0,100,100}, birdColour};
 
@@ -119,6 +167,9 @@ loop:
 
   drawRectWithOutline(renderer, &test, 12, black);
   drawCircle(renderer, birdPos, birdR, birdColour);
+
+  drawPipe(renderer, &testPipe);
+
 
   SDL_RenderPresent(renderer);
 
