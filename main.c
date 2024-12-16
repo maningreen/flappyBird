@@ -2,11 +2,16 @@
 #include <SDL2/SDL_rect.h>
 #include <SDL2/SDL_render.h>
 #include <math.h>
+#include <time.h>
 
 #define gravity 20
 #define jumpStrength 10
 #define sqrt2 sqrtf(2.0f)
-#define pipeSpeed 100
+#define pipeSpeed 5
+#define pipesOnScreen 2
+#define maxChangePipes 250
+#define maxPipePos (position){-50, 400} //min, max
+#define pointsPerPipe 10
 
 struct float2 {
   float x;
@@ -49,6 +54,14 @@ typedef struct pipe pipe;
 
 void setColour(SDL_Renderer* renderer, colour col) {
   SDL_SetRenderDrawColor(renderer, col.r, col.g, col.b, col.a);
+}
+
+int min(int a, int b) {
+  return a > b ? b : a;
+}
+
+int max(int a, int b) {
+  return a > b ? a : b;
 }
 
 void drawCircle(SDL_Renderer* renderer, position pos, float radius, colour col) {
@@ -116,7 +129,16 @@ int sdlrectColliding(SDL_Rect* a, rect* b) {
   return SDL_IntersectRect(a, &b->rec, &buf);
 }
 
+int pipeColliding(SDL_Rect* a, pipe* b) {
+  SDL_Rect buf;
+  return SDL_IntersectRect(a, &b->a, &buf) || SDL_IntersectRect(a, &b->b, &buf) || 
+  SDL_IntersectRect(a, &b->c, &buf) || SDL_IntersectRect(a, &b->d, &buf);
+}
+
 int main() {
+
+  srand(time(NULL));
+
   SDL_Init(SDL_INIT_VIDEO);
 
   position winSize = {1000, 600};
@@ -132,18 +154,20 @@ int main() {
 
   unsigned int oldTime = SDL_GetTicks(); //time isn't negative hence the unsigned
   unsigned int newTime;
-  float delta;  //no unsigned here (you can't :( )
+  float delta;  //no unsigned here (you can't) :(
   float timer = 0;
 
-  pipe testPipe;
-  initPipe(&testPipe, &(position){500, 300});
-  testPipe.borderWidth = 12;
-  testPipe.Basecol = birdColour;
-  testPipe.outCol = black;
+  pipe pipeList[pipesOnScreen];
+  for(int i = 0; i < pipesOnScreen; i++) {
+    initPipe(&pipeList[i], &(position){(winSize.x + 60)/pipesOnScreen * i + winSize.x, winSize.y/2.0f});
+    pipeList[i].Basecol = birdColour;
+    pipeList[i].outCol = black;
+    pipeList[i].borderWidth = 5;
+  }
 
-  rect test = {(SDL_Rect){0,0,100,100}, birdColour};
+  int score = 0;
 
-  //using while wastes an instruction (at least in arm)
+  //using while wastes an instruction (cmp)
 loop:
   newTime = SDL_GetTicks();
   delta = (newTime - oldTime)/1000.0f;
@@ -165,32 +189,41 @@ loop:
   SDL_SetRenderDrawColor(renderer, backround.r, backround.g, backround.b, backround.a);
   SDL_RenderClear(renderer);
 
-  drawRectWithOutline(renderer, &test, 12, black);
   drawCircle(renderer, birdPos, birdR, birdColour);
-
-  drawPipe(renderer, &testPipe);
-
+  for(int i = 0; i < pipesOnScreen; i++) {
+    drawPipe(renderer, &pipeList[i]);
+    movePipe(&pipeList[i], &(position){-pipeSpeed, 0});
+    if(pipeList[i].b.x < -60) {
+      srand(time(NULL));
+      int lastY = pipeList[i != pipesOnScreen - 1 ? i : 0].b.y;
+      int off = rand() % (maxChangePipes << 1) - maxChangePipes;
+      int newPos = max(min(lastY + off, maxPipePos.y), maxPipePos.x);
+      initPipe(&pipeList[i], &(position){winSize.x + 5, newPos});
+      score += pointsPerPipe;
+    } else if(pipeColliding(&birdBox, &pipeList[i])) {
+      goto end;
+    }
+  }
 
   SDL_RenderPresent(renderer);
 
   if(birdPos.y >= winSize.y || birdPos.y <= 0)
     goto end;
 
-  SDL_Rect buffer;
-  if(sdlrectColliding(&birdBox, &test))
-    goto end;
-
   birdPos.y += birdV;
-  birdBox.y = birdPos.y - birdR/sqrt2;
-  birdV += gravity * delta;
+  birdBox.y = birdPos.y - birdR/sqrt2; //reason we use sqrt 2 is because sin(pi/2) == sqrt2
+                                       //specifically that is 90 degrees, and thats where a square with 4 intersections must lie
+  birdV += gravity * delta;            //and we do birdr/sqrt2 because...... i forgot why to be honest
 
   oldTime = newTime;
-  SDL_Delay(16);
+  SDL_Delay(20);
   goto loop;
 end:
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
   SDL_Quit();
+
+  printf("your score was %d\n", score);
 
   return 0;
 }
